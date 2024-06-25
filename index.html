@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>הצגת נתונים ועדכון</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; }
+        h1, h2 { color: #333; }
+        #dataList { list-style-type: none; padding: 0; }
+        #dataList li { background: #f4f4f4; margin-bottom: 10px; padding: 10px; }
+        button, select { cursor: pointer; padding: 5px 10px; margin-right: 12px;}
+        input, select { padding: 5px; margin-right: 10px; margin-bottom: 10px;}
+        .popup { display: none; position: fixed; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); } 
+        .popup-content { background-color: white; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .form-btn{margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <h1>נתוני המערכת:</h1>
+    
+    <div>
+        <h2>בחירת טבלה קיימת</h2>
+        <select id="tableSelect" onchange="setCurrentTable()">
+            <option value="">בחר טבלה קיימת</option>
+        </select>
+
+            <h2>יצירת טבלה חדשה</h2>
+            <input type="text" id="newTableInput" placeholder="שם טבלה חדשה">
+            <button onclick="createNewTable()">צור טבלה חדשה</button>
+       
+    </div>
+    
+    <h2 id="currentTableName"></h2>
+    <h3 id="addItemToTable"></h3>
+    
+    
+    <div id="dynamicForm" style="display: none;">
+        <button class="form-btn" onclick="addNewField()">הוסף שדה</button>
+        <div id="fields"></div>
+        <button class="form-btn" onclick="addItem()">הוסף פריט</button>
+    </div>
+
+    <div id="searchArea" style="display: none;">
+        <h3>חיפוש</h3>
+        <input type="text" id="searchInput" placeholder="חפש לפי ID או שם">
+        <button onclick="searchItems()">חפש</button>
+    </div>
+    
+    <ul id="dataList"></ul>
+
+    <div id="updatePopup" class="popup">
+        <div class="popup-content">
+            <span class="close" onclick="closeUpdatePopup()">&times;</span>
+            <h2>עדכון פריט</h2>
+            <div id="updateFields"></div>
+            <button onclick="updateItem()">עדכן</button>
+        </div>
+    </div>
+
+    <script>
+        let currentTable = '';
+
+        function fetchTables() {
+            fetch('api.php?action=getTables')
+                .then(response => response.json())
+                .then(tables => {
+                    const tableSelect = document.getElementById('tableSelect');
+                    tableSelect.innerHTML = '<option value="">בחר טבלה קיימת</option>';
+                    tables.forEach(table => {
+                        const option = document.createElement('option');
+                        option.value = table;
+                        option.textContent = table;
+                        tableSelect.appendChild(option);
+                    });
+                });
+        }
+
+        function setCurrentTable() {
+            currentTable = document.getElementById('tableSelect').value;
+            document.getElementById('currentTableName').textContent = `טבלה נוכחית: ${currentTable}`;
+            document.getElementById('dynamicForm').style.display = 'block';
+            document.getElementById('searchArea').style.display = 'block';
+
+            document.getElementById('addItemToTable').innerHTML = `הוספת רשומה`;
+            document.getElementById('fields').innerHTML = '';
+            fieldCount = 0;
+            
+            if (currentTable) {
+                fetch(`api.php?action=getTableStructure&table=${currentTable}`)
+                    .then(response => response.json())
+                    .then(structure => {
+                        structure.columns.forEach(column => {
+                            if (column !== 'id') {
+                                addField(column);
+                            }
+                        });
+                        fetchItems();
+                    });
+            }
+        }
+
+        function createNewTable() {
+            const newTableName = document.getElementById('newTableInput').value;
+            if (newTableName) {
+                fetch(`api.php?action=createTable&table=${newTableName}`, {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        currentTable = newTableName;
+                        updateCurrentTableDisplay();
+                        fetchItems();
+                        fetchTables();  // עדכון רשימת הטבלאות
+                        document.getElementById('newTableInput').value = '';
+                        document.getElementById('dynamicForm').style.display = 'block';
+                        document.getElementById('searchArea').style.display = 'block';
+
+                    } else {
+                        alert('שגיאה ביצירת הטבלה: ' + data.error);
+                    }
+                });
+            } else {
+                alert('אנא הכנס שם לטבלה החדשה');
+            }
+        }
+
+        function updateCurrentTableDisplay() {
+            document.getElementById('currentTableName').textContent = `טבלה נוכחית: ${currentTable}`;
+        }
+
+        function fetchItems() {
+            if (!currentTable) return;
+            fetch(`api.php?action=get&table=${currentTable}`)
+                .then(response => response.json())
+                .then(items => {
+                    displayItems(items);
+                });
+        }
+
+        function addField(fieldName = '') {
+            if (!currentTable) {
+                alert('אנא בחר טבלה תחילה');
+                return;
+            }
+            if (fieldName === 'id') return;
+
+            const fieldsContainer = document.getElementById('fields');
+            const fieldDiv = document.createElement('div');
+            fieldDiv.innerHTML = `
+                <input type="text" placeholder="שם השדה" value="${fieldName}" ${fieldName ? 'readonly' : ''}>
+                <input type="text" placeholder="ערך">
+            `;
+            fieldsContainer.appendChild(fieldDiv);
+            fieldCount++;
+        }
+
+        function addNewField() {
+            if (!currentTable) {
+                alert('אנא בחר טבלה תחילה');
+                return;
+            }
+            const newFieldName = prompt("הכנס שם לשדה החדש:");
+            if (newFieldName && newFieldName.trim() !== '') {
+                fetch(`api.php?action=addField&table=${currentTable}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fieldName: newFieldName })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        addField(newFieldName);
+                        fetchItems(); 
+                        alert('שגיאה בהוספת השדה החדש');
+                    }
+                });
+            }
+        }
+
+        function addItem() {
+            if (!currentTable) {
+                alert('אנא בחר טבלה תחילה');
+                return;
+            }
+            const fields = document.querySelectorAll('#fields > div');
+            const data = {};
+            fields.forEach(field => {
+                const [keyInput, valueInput] = field.querySelectorAll('input');
+                if (keyInput.value !== 'id') {
+                    data[keyInput.value] = valueInput.value;
+                }
+            });
+
+            fetch(`api.php?action=insert&table=${currentTable}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(() => {
+                fetchItems();
+                clearFields();
+            });
+        }
+
+        function updateItem() {
+            if (!currentTable || !currentItemId) return;
+            
+            const updateFields = document.querySelectorAll('#updateFields input');
+            const data = {};
+            updateFields.forEach(field => {
+                data[field.name] = field.value;
+            });
+
+            fetch(`api.php?action=update&table=${currentTable}&id=${currentItemId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    closeUpdatePopup();
+                    fetchItems();
+                } else {
+                    alert('שגיאה בעדכון הפריט');
+                }
+            });
+        }
+
+        function deleteItem(id) {
+            fetch(`api.php?action=delete&table=${currentTable}&id=${id}`)
+                .then(() => fetchItems());
+        }
+
+        // load all exsisting tables
+        fetchTables();
+
+        let currentItemId = null;
+
+        function openUpdatePopup(item) {
+            currentItemId = item.id;
+            const updateFields = document.getElementById('updateFields');
+            updateFields.innerHTML = '';
+            Object.entries(item).forEach(([key, value]) => {
+                if (key !== 'id') {
+                    const fieldDiv = document.createElement('div');
+                    fieldDiv.innerHTML = `
+                        <label>${key}:</label>
+                        <input type="text" name="${key}" value="${value}">
+                    `;
+                    updateFields.appendChild(fieldDiv);
+                }
+            });
+            document.getElementById('updatePopup').style.display = 'block';
+        }
+
+        function closeUpdatePopup() {
+            document.getElementById('updatePopup').style.display = 'none';
+            currentItemId = null;
+        }
+
+        function searchItems() {
+            const searchTerm = document.getElementById('searchInput').value.trim();
+            if (!currentTable) {
+                alert('אנא בחר טבלה לפני החיפוש');
+                return;
+            }
+
+            if (searchTerm === '') {
+                fetchItems(); // אם שדה החיפוש ריק, הצג את כל הפריטים
+                return;
+            }
+
+            fetch(`api.php?action=search&table=${currentTable}&term=${encodeURIComponent(searchTerm)}`)
+                .then(response => response.json())
+                .then(result => {
+                    if (Array.isArray(result)) {
+                        displayItems(result);
+                    } else if (result.error) {
+                        alert('שגיאה: ' + result.error);
+                    } else {
+                        console.error('Unexpected response:', result);
+                        alert('התקבלה תשובה לא צפויה מהשרת');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('אירעה שגיאה בחיפוש');
+                });
+        }
+
+        function displayItems(items) {
+            const dataList = document.getElementById('dataList');
+            dataList.innerHTML = '';
+            
+            if (!Array.isArray(items) || items.length === 0) {
+                dataList.innerHTML = '<li>לא נמצאו תוצאות</li>';
+                return;
+            }
+
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = Object.entries(item)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join(', ');
+                const updateButton = document.createElement('button');
+                updateButton.textContent = 'עדכן';
+                updateButton.onclick = () => openUpdatePopup(item);
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = 'מחק';
+                deleteButton.onclick = () => deleteItem(item.id);
+                li.appendChild(updateButton);
+                li.appendChild(deleteButton);
+                dataList.appendChild(li);
+            });
+        }
+    </script>
+</body>
+</html>
