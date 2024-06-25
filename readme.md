@@ -15,6 +15,7 @@ phpJsonBuilder is a simple PHP-based JSON database management system that allows
 1. `api.php`: Handles API requests and routes them to appropriate actions
 2. `DatabaseBuilder.php`: Core class for managing JSON data operations
 3. `index.html`: Web interface for interacting with the JSON data
+4. `interactiveTestDatabaseBuilder.php`: Interactive test for the database builder
 
 ## Installation
 
@@ -31,18 +32,9 @@ phpJsonBuilder is a simple PHP-based JSON database management system that allows
 
 ### Terminal Testing
 
-There is 2 kind of testing
-1. General test 
+You can test the functionality using the interactive test script in your terminal. To run the interactive test, use the following command:
 
-insert in your terminal:
-
-`php test_database_builder.php`
-
-2. Interactive test
-
-insert in your terminal:
-
-`php interactive_test_database_builder.php`
+`php interactiveTestDatabaseBuilder.php`
 
 ### Web Interface
 
