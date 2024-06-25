@@ -58,4 +58,3 @@ You can test the functionality using the interactive test script in your termina
 
 - PHP 7.4 or higher
 - Web server (e.g., Apache, Nginx)
-- Write permissions for the `databases` folder
